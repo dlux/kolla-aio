@@ -1,0 +1,5 @@
+language: python
+install:
+  - pip install bashate
+script:
+  - bashate install.sh
