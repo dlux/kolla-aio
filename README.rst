@@ -3,6 +3,7 @@ kolla-aio
 =========
 
 Kolla aio deployment for stable-rocky branch
+Modify install.sh to change release and branch of the installation
 
 Usage
 -----
