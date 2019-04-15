@@ -10,7 +10,8 @@ set -o xtrace
 
 pushd /opt
 release='rocky'
-branch='stable/rocky'
+kolla_ansible_tag='7.1.0'
+inventory_file=/opt/all-in-one
 
 # If proxy passed as parameter
 [[ -n "$1" ]] && x="-x $1"
@@ -30,71 +31,58 @@ UpdatePackageManager
 ###########################################################################
 #############    DEPENDENCIES                                ##############
 ###########################################################################
-WriteLog '---> INSTALL DEPENDENCIES'
-curl -Lo- https://bootstrap.pypa.io/get-pip.py | python
+WriteLog '---> INSTALL SYSTEM DEPENDENCIES'
 yum install -y python-devel libffi-devel gcc openssl-devel libselinux-python
 yum install -y vim git
-yum groupinstall -y "Development Tools"
-pip install ansible
 
-WriteLog '---> ADD ANSIBLE CONFIGURATION'
+WriteLog '---> INSTALL PIP DEPENDENCIES'
+curl -Lo- https://bootstrap.pypa.io/get-pip.py | python
+pip install -U pip
+pip install ansible
+pip install virtualenv
+virtualenv venv
+
+WriteLog '---> INSTALLING KOLLA-ANSIBLE FOR PRODUCTION'
+# Version 7.1.0 - rocky
+# https://pypi.org/project/kolla-ansible/
+# https://releases.openstack.org/teams/kolla.html
+pip install "kolla-ansible==$kolla_ansible_tag"
+mkdir -p /etc/kolla
+cp /usr/share/kolla-ansible/etc_examples/kolla/* /etc/kolla/
+cp /usr/share/kolla-ansible/ansible/inventory/* .
+
+WriteLog '---> CONFIGURE ANSIBLE'
 mkdir -p /etc/ansible
 txt="[defaults]\nhost_key_checking=False\npipelining=True\nforks=100"
 echo -e $txt >> /etc/ansible/ansible.cfg
 
-WriteLog '---> INSTALLING KOLLA-ANSIBLE'
-# Production:
-#pip install kolla-ansible
-#cp -r /usr/share/kolla-ansible/etc_examples/kolla /etc/
-#cp /usr/share/kolla-ansible/ansible/inventory/* .
-#kolla-genpwd
+WriteLog '---> PREPARING CONFIGURATION - INVENTORY'
+ansible -i $inventory_file all -m ping
 
-# Development
-git clone https://github.com/openstack/kolla
-pushd kolla
-git checkout $branch
-pip install -r requirements.txt
-popd
+WriteLog '---> PREPARING CONFIGURATION - KOLLA PASSWORDS'
+kolla-genpwd
 
-git clone https://github.com/openstack/kolla-ansible
-pushd kolla-ansible
-git checkout $branch
-pip install -r requirements.txt
-popd
-mkdir -p /etc/kolla
-cp -r kolla-ansible/etc/kolla/* /etc/kolla
-cp kolla-ansible/ansible/inventory/* .
-
-WriteLog '---> GENERATING KOLLA PASSWORDS'
-pushd kolla-ansible/tools
-./generate_passwords.py
-popd
-
-WriteLog '---> FIXING GLOBALS CONFIGURATION'
+WriteLog '---> PREPARING CONFIGURATION - GLOBALS'
 pushd /etc/kolla
-sed -i '/kolla_base_distro:/a kolla_base_distro: "centos"' globals.yml
-sed -i '/kolla_install_type:/a kolla_install_type: "source"' globals.yml
-sed -i "/openstack_release:/a openstack_release: \"$release\"" globals.yml
-sed -i '/network_interface:/a network_interface: "eth1"' globals.yml
-
-#nei='neutron_external_interface:'
-#sed -i "/$nei/a $nei \"eth2\"" globals.yml
-
-kiv='kolla_internal_vip_address:'
-sed -i "s/^$kiv/#$kiv/g" globals.yml
-sed -i "/$kiv/a $kiv \"172.16.0.16\"" globals.yml
-
-
-sed -i '/enable_haproxy:/a enable_haproxy: "no"' globals.yml
+fg='globals.yml'
+sed -i '/kolla_base_distro:/a kolla_base_distro: "centos"' $fg
+sed -i '/kolla_install_type:/a kolla_install_type: "source"' $fg
+sed -i "/openstack_release:/a openstack_release: \"$release\"" $fg
+sed -i '/network_interface:/a network_interface: "eth1"' $fg
+sed -i '/neutron_external_interface:/a neutron_external_interface: "eth2"' $fg
+#sed -i '/neutron_plugin_agent:/a neutron_plugin_agent: "openvswitch"' $fg
+sed -i 's/^kolla_internal_vip_address:/#kolla_internal_vip_address:/g' $fg
+sed -i 's/^tempest_/#tempest_/g' $fg
+sed -i '/kolla_internal_vip_address:/a \
+kolla_internal_vip_address: "172.16.0.253"' $fg
+sed -i '/kolla_external_vip_address:/a \
+kolla_external_vip_address: "192.168.0.15"' $fg
+sed -i '/kolla_external_vip_interface:/a \
+kolla_external_vip_interface: "eth0"' $fg
 popd
-ansible -i all-in-one all -m ping
 
 WriteLog '---> DEPLOYING'
-pushd kolla-ansible/tools
-inventory_file="/opt/all-in-one"
-
-./kolla-ansible -i $inventory_file bootstrap-servers
-popd
+kolla-ansible -vvv -i $inventory_file bootstrap-servers | tee bootstrap.log
 
 # Configure proxy on docker
 if [[ -f .PROXY ]]; then
@@ -115,9 +103,22 @@ if [[ -f .PROXY ]]; then
     systemctl restart docker
     popd
 fi
-pushd kolla-ansible/tools
-for action in prechecks deploy check post-deploy; do
-    ./kolla-ansible -vvv -i $inventory_file $action | tee $action.log
-done
+kolla-ansible -vvv -i $inventory_file prechecks | tee prechecks.log
+kolla-ansible -vvv -i $inventory_file deploy | tee deploy.log
+
+#kolla-ansible -vvv -i $inventory_file check | tee check.log
+kolla-ansible -vvv -i $inventory_file post-deploy | tee post_deploy.log
+
+. venv/bin/activate
+pip install python-openstackclient python-glanceclient python-neutronclient
+. /etc/kolla/admin-openrc.sh
+. /usr/share/kolla-ansible/init-runonce
+
+# Create ssh vagrant tunnel
+# ssh localhost -p 2222 -i .vagrant/machines/default/virtualbox/private_key \
+#-l vagrant -L 8889:172.16.0.15:80
+# Go to http://localhost:8889 to access horizon
+
 popd
+WriteLog '---> INSTALLATION COMPLETE - See /opt/deploy.log'
 

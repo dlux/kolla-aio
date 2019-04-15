@@ -15,18 +15,19 @@ Vagrant.configure(2) do |config|
   config.vm.network :forwarded_port, guest: 80, host: 8080
   # Private openstack management network
   config.vm.network :private_network, ip: '172.16.0.15'
-  #config.vm.synced_folder ".", "/opt/shared", type: "nfs"
+  # Neutron external net: raw interface to be used as external network port
+  config.vm.network :private_network, ip: '120.120.120.120'
 
   config.vm.provider 'virtualbox' do |v|
     # Public - Filtered Provider Network
-    v.customize ["modifyvm", :id, "--natnet1", "198.168.0.0/24"]
-    v.customize ['modifyvm', :id, '--memory', 1024 * 6 ]
+    v.customize ["modifyvm", :id, "--natnet1", "182.16.0.0/24"]
+    v.customize ['modifyvm', :id, '--memory', 1024 * 10 ]
     v.customize ["modifyvm", :id, "--cpus", 2]
   end
 
   config.vm.provision 'shell' do |s|
     s.path = 'install.sh'
-#    s.args = 'http://proxy-server'
+#    s.args = ENV['http_proxy']
   end
 
 end
