@@ -3,3 +3,4 @@ install:
   - pip install bashate
 script:
   - bashate install.sh
+  - bashate install_dev.sh
