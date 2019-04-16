@@ -23,7 +23,14 @@ source common_packages
 WriteLog "Deploying conteinarized OpenStack AIO via Kolla-ansible"
 WriteLog "Proxy=$1"
 
-[[ -n "$1" ]] && SetProxy "$1"
+if [[ -n "$1" ]]; then
+    SetProxy "$1"
+    # Add private networks to no_proxy
+    sed -i 's/no_proxy=/no_proxy=152.16.0.0\/24,20.20.0.0\/24,/g' .PROXY
+    sed -i 's/NO_PROXY=/no_proxy=152.16.0.0\/24,20.20.0.0\/24,/g' .PROXY
+    source .PROXY
+fi
+
 EnsureRoot
 sleep 1
 UpdatePackageManager
@@ -83,7 +90,6 @@ popd
 
 WriteLog '---> DEPLOYING'
 kolla-ansible -vvv -i $inventory_file bootstrap-servers | tee 1_bootstrap.log
-
 # Configure proxy on docker
 if [[ -f .PROXY ]]; then
     source .PROXY
@@ -100,7 +106,7 @@ if [[ -f .PROXY ]]; then
         echo "Environment=\"NO_PROXY=$no_proxy\"" >> no-proxy.conf
     fi
     # Add vagrant user to docker group
-    usermod -aG docker Vagrant
+    usermod -aG docker vagrant
 
     systemctl daemon-reload
     systemctl restart docker
@@ -111,15 +117,10 @@ kolla-ansible -vvv -i $inventory_file deploy | tee 3_deploy.log
 kolla-ansible -vvv -i $inventory_file check | tee 4_check.log
 kolla-ansible -vvv -i $inventory_file post-deploy | tee 5_post_deploy.log
 
-sleep 5
-
 . venv/bin/activate
-. /opt/.PROXY
 pip install python-openstackclient python-glanceclient python-neutronclient
-sed -i 's/152.16.0.5/152.16.0.15/g' /etc/kolla/admin-openrc.sh
 source /etc/kolla/admin-openrc.sh
-pushd /usr/share/kolla-ansible/
-./init-runonce
+/usr/share/kolla-ansible/init-runonce
 
 # Create ssh vagrant tunnel
 # ssh localhost -p 2222 -i .vagrant/machines/default/virtualbox/private_key \
@@ -129,7 +130,6 @@ pushd /usr/share/kolla-ansible/
 # Connect to docker container to troubleshoot
 # Get container name: 'docker ps'
 # Connect 'docker exec -it <container_name> /bin/bash'
-
 
 popd
 WriteLog '---> INSTALLATION COMPLETE - See /opt/deploy.log'
