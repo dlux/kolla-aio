@@ -74,15 +74,15 @@ sed -i '/neutron_external_interface:/a neutron_external_interface: "eth2"' $fg
 sed -i 's/^kolla_internal_vip_address:/#kolla_internal_vip_address:/g' $fg
 sed -i 's/^tempest_/#tempest_/g' $fg
 sed -i '/kolla_internal_vip_address:/a \
-kolla_internal_vip_address: "172.16.0.253"' $fg
+kolla_internal_vip_address: "152.16.0.5"' $fg
 sed -i '/kolla_external_vip_address:/a \
-kolla_external_vip_address: "192.168.0.15"' $fg
+kolla_external_vip_address: "20.20.0.5"' $fg
 sed -i '/kolla_external_vip_interface:/a \
 kolla_external_vip_interface: "eth0"' $fg
 popd
 
 WriteLog '---> DEPLOYING'
-kolla-ansible -vvv -i $inventory_file bootstrap-servers | tee bootstrap.log
+kolla-ansible -vvv -i $inventory_file bootstrap-servers | tee 1_bootstrap.log
 
 # Configure proxy on docker
 if [[ -f .PROXY ]]; then
@@ -99,25 +99,37 @@ if [[ -f .PROXY ]]; then
         echo '[Service]' > no-proxy.conf
         echo "Environment=\"NO_PROXY=$no_proxy\"" >> no-proxy.conf
     fi
+    # Add vagrant user to docker group
+    usermod -aG docker Vagrant
+
     systemctl daemon-reload
     systemctl restart docker
     popd
 fi
-kolla-ansible -vvv -i $inventory_file prechecks | tee prechecks.log
-kolla-ansible -vvv -i $inventory_file deploy | tee deploy.log
+kolla-ansible -vvv -i $inventory_file prechecks | tee 2_prechecks.log
+kolla-ansible -vvv -i $inventory_file deploy | tee 3_deploy.log
+kolla-ansible -vvv -i $inventory_file check | tee 4_check.log
+kolla-ansible -vvv -i $inventory_file post-deploy | tee 5_post_deploy.log
 
-#kolla-ansible -vvv -i $inventory_file check | tee check.log
-kolla-ansible -vvv -i $inventory_file post-deploy | tee post_deploy.log
+sleep 5
 
 . venv/bin/activate
+. /opt/.PROXY
 pip install python-openstackclient python-glanceclient python-neutronclient
-. /etc/kolla/admin-openrc.sh
-. /usr/share/kolla-ansible/init-runonce
+sed -i 's/152.16.0.5/152.16.0.15/g' /etc/kolla/admin-openrc.sh
+source /etc/kolla/admin-openrc.sh
+pushd /usr/share/kolla-ansible/
+./init-runonce
 
 # Create ssh vagrant tunnel
 # ssh localhost -p 2222 -i .vagrant/machines/default/virtualbox/private_key \
 #-l vagrant -L 8889:172.16.0.15:80
 # Go to http://localhost:8889 to access horizon
+
+# Connect to docker container to troubleshoot
+# Get container name: 'docker ps'
+# Connect 'docker exec -it <container_name> /bin/bash'
+
 
 popd
 WriteLog '---> INSTALLATION COMPLETE - See /opt/deploy.log'
