@@ -9,12 +9,12 @@ Kolla AIO deployment for stable-rocky branch.
 
 Modify install.sh to change release and branch of the installation.
 
+
 .. image:: image.svg
-   :height: 100px
-   :width: 200px
-   :scale: 50 %
+   :height: 300px
+   :width: 400px
    :alt: diagram
-   :align: right
+
 
 Usage
 -----
