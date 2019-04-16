@@ -1,6 +1,8 @@
 language: python
 install:
   - pip install bashate
+  - pip install rstcheck
 script:
+  - rstcheck README.rst
   - bashate install.sh
   - bashate install_dev.sh
