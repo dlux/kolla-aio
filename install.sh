@@ -86,13 +86,6 @@ sed -i '/kolla_external_vip_address:/a \
 kolla_external_vip_address: "20.20.0.5"' $fg
 sed -i '/kolla_external_vip_interface:/a \
 kolla_external_vip_interface: "eth0"' $fg
-sed -i '/enable_ironic:/a \
-enable_ironic: "yes"
-enable_ironic_ipxe: "yes"
-enable_ironic_neutron_agent: "no"
-enable_ironic_pxe_uefi: "yes"' $fg
-sed -i '/ironic_dnsmasq_dhcp_range:/a \
-ironic_dnsmasq_dhcp_range: "152.16.0.20,152.16.0.30"' $fg
 popd
 
 WriteLog '---> DEPLOYING'
