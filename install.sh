@@ -9,8 +9,8 @@
 set -o xtrace
 
 pushd /opt
-release='rocky'
-kolla_ansible_tag='7.1.0'
+release='stein'
+kolla_ansible_tag='8.0.0.0rc1'
 inventory_file=/opt/all-in-one
 
 # If proxy passed as parameter
